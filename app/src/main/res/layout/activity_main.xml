@@ -198,10 +198,18 @@
         android:layout_height="50dp"
         android:contentDescription="@string/reset"
         android:layout_margin="5dp"
-        android:onClick="eraseClicked"
-        android:background="@color/white"
         android:id="@+id/ib_reset"
         android:src="@drawable/ic_reset"
+        android:scaleType="fitXY"
+        />
+
+    <ImageButton
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:contentDescription="save imagre"
+        android:layout_margin="5dp"
+        android:id="@+id/ib_save"
+        android:src="@drawable/ic_save"
         android:scaleType="fitXY"
         />
 

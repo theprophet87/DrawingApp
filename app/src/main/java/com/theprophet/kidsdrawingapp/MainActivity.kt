@@ -3,6 +3,10 @@ package com.theprophet.kidsdrawingapp
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.media.Image
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -14,11 +18,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.get
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.util.jar.Manifest
 
 class MainActivity : AppCompatActivity() {
     private var drawingView: DrawingView? = null
     private var mImageButtonCurrentPaint: ImageButton? = null
+    var customProgressDialog: Dialog? = null
 
     val openGalleryLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()){
@@ -89,6 +101,22 @@ class MainActivity : AppCompatActivity() {
             drawingView?.onClickReset() //calls method from 'DrawingView' class to 'undo' drawing
         }
 
+        val ib_save: ImageButton = findViewById(R.id.ib_save)
+        ib_save.setOnClickListener {
+            if(isReadStorageAllowed()){
+                showProgressDialog()
+                lifecycleScope.launch {
+
+                    //get the frame layout
+                    val flDrawingView: FrameLayout = findViewById(R.id.fl_drawing_view_container)
+
+                    saveBitmapFile(getBitmapFromView(flDrawingView))
+
+                }
+            }
+
+        }
+
         val ibGallery: ImageButton = findViewById(R.id.ib_gallery)
         ibGallery.setOnClickListener {
             requestStoragePermission()
@@ -149,7 +177,81 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    //saves drawing to bitmap
+    private fun getBitmapFromView(view: View): Bitmap{
 
+        val returnedBitmap = Bitmap.createBitmap(view.width,view.height,Bitmap.Config.ARGB_8888)
+
+        val canvas = Canvas(returnedBitmap)
+        val bgDrawable = view.background  //take background image, if any
+
+        //handle saving canvas if there is a background or not
+        if(bgDrawable != null){
+            bgDrawable.draw(canvas)
+        }else{
+            canvas.drawColor(Color.WHITE)
+        }
+            view.draw(canvas)
+
+        return returnedBitmap
+
+    }
+
+    //coroutine for saving bitmap
+    private suspend fun  saveBitmapFile(mBitmap: Bitmap?): String{
+        var result = ""
+        withContext(Dispatchers.IO){
+            if(mBitmap != null){
+                try{
+                    val bytes = ByteArrayOutputStream()
+
+                    //how we want to compress the bitmap file when saving it
+                    mBitmap.compress(Bitmap.CompressFormat.PNG, 90, bytes)
+
+                    //creating the file name of the saved image
+                    val f = File(externalCacheDir?.absoluteFile.toString() +
+                    File.separator + "DrawingApp_" + System.currentTimeMillis()/1000 + ".png"
+                    )
+
+                    val fo = FileOutputStream(f)
+                    fo.write(bytes.toByteArray())
+                    fo.close()
+
+                    result = f.absolutePath //this will be the absolute path of where the file is saved
+
+                    runOnUiThread{
+                        if(result.isNotEmpty()){
+                            cancelProgressDialog()
+                            Toast.makeText(this@MainActivity,
+                                "File saved successfully: $result",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }else{
+                            Toast.makeText(this@MainActivity,
+                                "Something went wrong saving the file.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+                catch(e: Exception){
+                    result = ""
+                    e.printStackTrace()
+                }
+            }
+
+        }
+        return result
+    }
+
+    private fun isReadStorageAllowed(): Boolean{
+        val result = ContextCompat.checkSelfPermission(this,
+        android.Manifest.permission.READ_EXTERNAL_STORAGE)
+
+        return result == PackageManager.PERMISSION_GRANTED
+    }
+
+    //handles what permissions the app has in terms of writing and reading to and from external storage
     private fun requestStoragePermission(){
         if(ActivityCompat.shouldShowRequestPermissionRationale(
                 this,
@@ -157,8 +259,8 @@ class MainActivity : AppCompatActivity() {
             showRationaleDialog(appName, "$appName needs to access your external storage.")
         }else{
             requestPermission.launch(arrayOf(
-                android.Manifest.permission.READ_EXTERNAL_STORAGE
-            //TODO - Add writing external storage
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
             ))
 
         }
@@ -176,4 +278,28 @@ class MainActivity : AppCompatActivity() {
 
 
     }
+
+    //function that shows the progress dialog
+    private fun showProgressDialog(){
+        customProgressDialog = Dialog(this@MainActivity)
+
+        /* Set the screen content from a layout resource.
+        The resource will be inflated, adding all top-level views to the screen.
+         */
+        customProgressDialog?.setContentView(R.layout.dialog_custom_progress)
+
+        //Start the dialog and display it on the screen.
+        customProgressDialog?.show()
+
+    }
+
+    //cancel the progress dialog once the image is done saving
+    private fun cancelProgressDialog(){
+        if(customProgressDialog != null){
+            customProgressDialog?.dismiss()
+            customProgressDialog = null
+        }
+    }
+
+
 }
